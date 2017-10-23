@@ -45,8 +45,8 @@ if enabled['GENIA']:
     feat_genia=None
 
 enabled_IOB_nonprose_sentence_features = []
-#enabled_IOB_nonprose_sentence_features.append('pos')
-#enabled_IOB_nonprose_sentence_features.append('pos_context')
+enabled_IOB_nonprose_sentence_features.append('pos')
+enabled_IOB_nonprose_sentence_features.append('pos_context')
 enabled_IOB_nonprose_sentence_features.append('prev')
 enabled_IOB_nonprose_sentence_features.append('next')
 enabled_IOB_nonprose_sentence_features.append('unigram_context')
