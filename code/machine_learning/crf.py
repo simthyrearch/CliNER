@@ -1,5 +1,5 @@
 ######################################################################
-#  CliCon - crf.py                                                   #
+#  CliNER - crf.py                                                   #
 #                                                                    #
 #  Willie Boag                                      wboag@cs.uml.edu #
 #                                                                    #

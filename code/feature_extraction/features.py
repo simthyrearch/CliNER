@@ -28,10 +28,9 @@ if enabled['GENIA']:
     from genia_dir.genia_features import GeniaFeatures
 
 
-# Only create UMLS cache if module is available
+#Only create UMLS cache if module is available
 if enabled['UMLS']:
     from umls_dir import interface_umls
-    from umls_dir import interpret_umls
     import umls_dir.umls_features as feat_umls
     from umls_dir.umls_cache import UmlsCache
     umls_cache = UmlsCache()
@@ -66,9 +65,10 @@ def extract_features(tok_sents):
     @param Y         A list of list of IOB (1:1 mapping with data)
     @return          tuple: list of IOB_prose_features, list of IOB
     """
+
     # Genia preprocessing
     sentence_features_preprocess(tok_sents)
-
+    
     # iterate through all data & extract features (sentence-by-sentence)
     prose_feats   = []
     for sentence in tok_sents:

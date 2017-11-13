@@ -21,8 +21,6 @@ from machine_learning   import crf
 from notes.documents    import labels as tag2id, id2tag
 from tools              import flatten, save_list_structure, reconstruct_list
 
-
-
 # Stores the verbosity
 
 import numpy as np
@@ -152,7 +150,7 @@ class ClinerModel:
         # Extract formatted data
         tokenized_sentences = flatten([n.getTokenizedSentences() for n in notes])
         labels              = flatten([n.getTokenLabels() for n in notes])
-
+       
         self.train_fit(tokenized_sentences, labels, dev_split=0.1)
 
         self._training_files = [ n.getName() for n in notes ]
@@ -359,6 +357,7 @@ def generic_train(p_or_n, tokenized_sents, iob_nested_labels, use_lstm, val_sent
         '''
         text_features = extract_features(tokenized_sents)
         # type(text_features): <type 'list'>
+        # text_features is a list of list of dicts
         
         # Collect list of feature types
         enabled_features = set()
@@ -378,14 +377,12 @@ def generic_train(p_or_n, tokenized_sents, iob_nested_labels, use_lstm, val_sent
         flat_X_feats = vocab.fit_transform( flatten(text_features) )
         X_feats = reconstruct_list(flat_X_feats, save_list_structure(text_features))
 
-
         # vectorize IOB labels
         Y_labels = [ [tag2id[y] for y in y_seq] for y_seq in iob_nested_labels ]
 
         assert len(X_feats) == len(Y_labels)
         for i in range(len(X_feats)):
             assert X_feats[i].shape[0] == len(Y_labels[i])
-
 
         # if there is specified validation data, then vectorize it
         if val_sents:
@@ -399,9 +396,6 @@ def generic_train(p_or_n, tokenized_sents, iob_nested_labels, use_lstm, val_sent
 
 
     print '\ttraining classifiers', p_or_n
-
-    #val_sents  = val_sents[ :5]
-    #val_labels = val_labels[:5]
 
     if use_lstm:
         # train using lstm
