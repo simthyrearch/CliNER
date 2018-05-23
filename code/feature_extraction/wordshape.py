@@ -1,5 +1,3 @@
-import func_cache
-
 import re
 
 BOUNDARY_SIZE = 2
@@ -417,8 +415,6 @@ def wordShapeChris1 (s):
     else:
         return "SYMBOL"
 
-
 # gets Chris1, Dan1, Jenny1, Chris2 and Dan2 word shapes
-@func_cache.func_cache(False)
 def getWordShapes(word):
     return [wordShapeChris1(word), wordShapeDan1(word), wordShapeJenny1(word), wordShapeChris2(word, False, None), wordShapeDan2(word, None)]

@@ -99,22 +99,22 @@ class Document:
             # A list of words (corresponding line from the text file)
             text = self._tok_sents[lineno-1]
 
-            #print "\n" + "-" * 80
-            #print "classification: ", classification
-            #print "lineno:         ", lineno
-            #print "start:          ", start
-            #print "end             ", end
-            #print "text:           ", text
-            #print 'len(text):      ', len(text)
-            #print "text[start]:    ", text[start]
-            #print "concept:        ", concept
+            #print("\n" + "-" * 80)
+            #print("classification: ", classification)
+            #print("lineno:         ", lineno)
+            #print("start:          ", start)
+            #print("end             ", end)
+            #print("text:           ", text)
+            #print('len(text):      ', len(text))
+            #print("text[start]:    ", text[start])
+            #print("concept:        ", concept)
 
             datum = text[start]
             for j in range(start, end):
                 datum += " " + text[j+1]
             datum = datum.lower()
 
-            #print 'datum:          ', datum
+            #print('datum:          ', datum)
 
             # Line:TokenNumber of where the concept starts and ends
             idx1 = "%d:%d" % (lineno, start)
@@ -163,8 +163,8 @@ def read_i2b2(txt, con):
             normed_toks = normalize_tokens(toks)
 
             #for w in normed_toks:
-            #    print w
-            #print
+            #    print(w)
+            #print()
 
             tokenized_sents.append(normed_toks)
 
@@ -208,7 +208,7 @@ def read_i2b2(txt, con):
         tok_concepts = list(set(tok_concepts))
 
         # Concept file does not guarantee ordering by line number
-        tok_concepts = sorted(tok_concepts, cmp=classification_cmp)
+        tok_concepts = sorted(tok_concepts, key=lambda t:t[1:])
 
         # Ensure no overlapping concepts (that would be bad)
         for i in range(len(tok_concepts)-1):
@@ -216,10 +216,15 @@ def read_i2b2(txt, con):
             c2 = tok_concepts[i+1]
             if c1[1] == c2[1]:
                 if c1[2] <= c2[2] and c2[2] <= c1[3]:
-                    fname = os.path.basenme(con)
+                    fname = os.path.basename(con)
                     error1='%s has overlapping entities on line %d'%(fname,c1[1])
                     error2="It can't be processed until you remove one"
-                    error_msg = '%s\n%s' % (error1,error2)
+                    error3='Please modify this file: %s' % con
+                    error4='\tentity 1: c="%s" %d:%d %d:%d||t="%s"'%(' '.join(tokenized_sents[c1[1]-1][c1[2]:c1[3]+1]),
+                                                                     c1[1], c1[2], c1[1], c1[3], c1[0])
+                    error5='\tentity 2: c="%s" %d:%d %d:%d||t="%s"'%(' '.join(tokenized_sents[c2[1]-1][c2[2]:c2[3]+1]),
+                                                                     c2[1], c2[2], c2[1], c2[3], c2[0])
+                    error_msg = '\n\n%s\n%s\n\n%s\n\n%s\n%s\n' % (error1,error2,error3,error4,error5)
                     raise DocumentException(error_msg)
 
     return tokenized_sents, tok_concepts
@@ -243,9 +248,9 @@ def tok_concepts_to_labels(tokenized_sents, tok_concepts):
     for i in range(len(tokenized_sents)):
         assert len(tokenized_sents[i]) == len(labels[i])
         for tok,lab in zip(tokenized_sents[i],labels[i]):
-            if lab != 'O': print '\t',
-            print lab, tok
-        print
+            if lab != 'O': print( '\t',)
+            print (lab, tok)
+        print()
     exit()
     '''
 
@@ -256,12 +261,11 @@ def tok_concepts_to_labels(tokenized_sents, tok_concepts):
 
 def tok_labels_to_concepts(tokenized_sents, tok_labels):
 
-    #print tok_labels
     '''
     for gold,sent in zip(tok_labels, tokenized_sents):
-        print gold
-        print sent
-        print
+        print(gold)
+        print(sent)
+        print()
     '''
 
     # convert 'B-treatment' into ('B','treatment') and 'O' into ('O',None)
@@ -283,13 +287,13 @@ def tok_labels_to_concepts(tokenized_sents, tok_labels):
             if iob == 'I':
                 # beginning of line has no previous
                 if i == 0:
-                    print 'CORRECTING! A'
+                    print( 'CORRECTING! A')
                     new_label = 'B' + labels[i][1:]
                 else:
                     # ensure either its outside OR mismatch type
                     prev_iob,prev_tag = split_label(labels[i-1])
                     if prev_iob == 'O' or prev_tag != tag:
-                        print 'CORRECTING! B'
+                        print( 'CORRECTING! B')
                         new_label = 'B' + labels[i][1:]
                     else:
                         new_label = labels[i]
@@ -304,10 +308,10 @@ def tok_labels_to_concepts(tokenized_sents, tok_labels):
         if trow != crow:
             for j,(t,c) in enumerate(zip(trow,crow)):
                 if t != c:
-                    print 'lineno: ', i
-                    print t, '\t', c
-                    print
-            print
+                    print('lineno: ', i)
+                    print (t, '\t', c)
+                    print()
+            print()
     exit()
     '''
     tok_labels = corrected
@@ -336,9 +340,9 @@ def tok_labels_to_concepts(tokenized_sents, tok_labels):
     for i in range(len(tokenized_sents)):
         assert len(tokenized_sents[i]) == len(tok_labels[i])
         for tok,lab in zip(tokenized_sents[i],tok_labels[i]):
-            if lab != 'O': print '\t',
-            print lab, tok
-        print
+            if lab != 'O': print( '\t',)
+            print (lab, tok)
+        print()
     exit()
     '''
 
@@ -349,18 +353,18 @@ def tok_labels_to_concepts(tokenized_sents, tok_labels):
         for i,(a,b) in enumerate(zip(test,gold)):
             #'''
             if not ((a == b)or(a[0]=='B' and b[0]=='I' and a[1:]==b[1:])):
-                print
-                print 'lineno:    ', lineno
-                print
-                print 'generated: ', test[i-3:i+4]
-                print 'predicted: ', gold[i-3:i+4]
-                print sent[i-3:i+4]
-                print 'a[0]:  ', a[0]
-                print 'b[0]:  ', b[0]
-                print 'a[1:]: ', a[1:]
-                print 'b[1:]: ', b[1:]
-                print 'a[1:] == b[a:]: ', a[1:] == b[1:]
-                print
+                print()
+                print( 'lineno:    ', lineno)
+                print()
+                print( 'generated: ', test[i-3:i+4])
+                print( 'predicted: ', gold[i-3:i+4])
+                print( sent[i-3:i+4])
+                print( 'a[0]:  ', a[0])
+                print( 'b[0]:  ', b[0])
+                print( 'a[1:]: ', a[1:])
+                print( 'b[1:]: ', b[1:])
+                print( 'a[1:] == b[a:]: ', a[1:] == b[1:])
+                print()
             #'''
             assert (a == b) or (a[0]=='B' and b[0]=='I' and a[1:]==b[1:])
             i += 1
@@ -371,37 +375,6 @@ def tok_labels_to_concepts(tokenized_sents, tok_labels):
 
 
 
-
-
 class DocumentException(Exception):
     pass
-
-
-def classification_cmp(a,b):
-    """
-    concept_cmp()
-
-    Purpose: Compare concept classification tokens
-    """
-    a = (int(a[1]), int(a[2]))
-    b = (int(b[1]), int(b[2]))
-
-    # Sort by line number
-    if a[0] < b[0]:
-        return -1
-    if a[0] > b[0]:
-        return  1
-    else:
-        # Resolve lineno ties with indices
-        if a[1] < b[1]:
-            return -1
-        if a[1] > b[1]:
-            return  1
-        else:
-            if a[2] < b[2]:
-                return -1
-            if a[2] > b[2]:
-                return  1
-            else:
-                return 0
 

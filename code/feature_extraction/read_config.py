@@ -55,4 +55,4 @@ def enabled_modules():
 
 
 if __name__ == "__main__":
-    print enabled_modules()
+    print(enabled_modules())

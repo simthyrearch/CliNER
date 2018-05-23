@@ -6,25 +6,21 @@
 #  Purpose: Define the model for clinical concept extraction.        #
 ######################################################################
 
-from __future__ import with_statement
-
+import sys
 from sklearn.feature_extraction  import DictVectorizer
 import os
 import random
 import math
 import io
-
+import numpy as np
 from time        import localtime, strftime
 from collections import defaultdict
 
-from machine_learning   import crf
-from notes.documents    import labels as tag2id, id2tag
-from tools              import flatten, save_list_structure, reconstruct_list
+from notes.documents import labels as tag2id, id2tag
+from tools           import flatten, save_list_structure, reconstruct_list
+from tools           import print_str, print_vec, print_files, write
 
-# Stores the verbosity
 
-import numpy as np
-from feature_extraction.features import extract_features
 
 
 class ClinerModel:
@@ -43,11 +39,15 @@ class ClinerModel:
             log = self._log
 
         # depending on whether it is already opened as a channel
-        if isinstance(out,file):
-            print >>out, log
+        if isinstance(out,type(sys.stdout)):
+            write(out, '%s\n' % log)
         else:
             with open(out, 'a') as f:
-                print >>f, log
+                write(f, '%s\n' % log)
+                
+                
+    def __log_str_NEURAL(self,model_file=None):
+        ""
 
 
     def __log_str(self, model_file=None):
@@ -57,61 +57,68 @@ class ClinerModel:
         @param model_file.  A path to optionally identify where the model was saved.
         @return  A string of the model's training information
         '''
+
         assert self._is_trained, 'ClinerModel not trained'
         with io.StringIO() as f:
-            f.write(u'\n')
-            f.write(unicode('-'*40))
-            f.write(u'\n\n')
+            write(f, u'\n')
+            write(f, '-'*40)
+            write(f, u'\n\n')
             if model_file:
-                f.write(unicode('model    : %s\n' % os.path.abspath(model_file)))
-                f.write(u'\n')
+                write(f, 'model    : %s\n' % os.path.abspath(model_file))
+                write(f, u'\n')
 
             if self._use_lstm:
-                f.write(u'modeltype: LSTM\n')
+                write(f, u'modeltype: LSTM\n')
             else:
-                f.write(u'modeltype: CRF\n')
+                write(f, u'modeltype: CRF\n')
 
             if 'hyperparams' in self._score:
                 for name,value in self._score['hyperparams'].items():
-                    f.write(u'\t%-10s: %s\n' % (name,value))
-            f.write(u'\n')
+                    write(f, u'\t%-10s: %s\n' % (name,value))
+            write(f, u'\n')
             
             print_str(f, 'features', self._features)
-            f.write(u'\n')
+            write(f, u'\n')
 
-            f.write(u'\n')
-            f.write(unicode('training began: %s\n' % self._time_train_begin))
-            f.write(unicode('training ended: %s\n' % self._time_train_end))
-            f.write(u'\n')
+            write(f, u'\n')
+            write(f, 'training began: %s\n' % self._time_train_begin)
+            write(f, 'training ended: %s\n' % self._time_train_end)
+            write(f, u'\n')
 
-            f.write(u'scores\n')
+            write(f, u'scores\n')
             print_vec(f, 'train precision', self._score['train']['precision'])
             print_vec(f, 'train recall   ', self._score['train']['recall'   ])
             print_vec(f, 'train f1       ', self._score['train']['f1'       ])
-            f.write(self._score['train']['conf'])
+            write(f, self._score['train']['conf'])
 
             if 'dev' in self._score:
                 print_vec(f, u'dev precision   ', self._score['dev']['precision'])
                 print_vec(f, u'dev recall      ', self._score['dev']['recall'   ])
                 print_vec(f, u'dev f1          ', self._score['dev']['f1'       ])
-                f.write(self._score['dev']['conf'])
+                write(f, self._score['dev']['conf'])
+
+            if 'test' in self._score:
+                print_vec(f, u'test precision   ', self._score['test']['precision'])
+                print_vec(f, u'test recall      ', self._score['test']['recall'   ])
+                print_vec(f, u'test f1          ', self._score['test']['f1'       ])
+                write(f, self._score['test']['conf'])
 
             if 'history' in self._score:
                 for label,vec in self._score['history'].items():
                     print_vec(f, '%-16s'%label, vec)
-                f.write(u'\n')
+                write(f, u'\n')
 
             if self._training_files:
-                f.write(u'\n')
-                f.write(u'Training Files\n')
+                write(f, u'\n')
+                write(f, u'Training Files\n')
                 if len(self._training_files) < 200:
                     print_files(f, self._training_files)
                 else:
-                    f.write(unicode('\t%d files\n'%len(self._training_files)))
-                f.write(u'\n')
+                    write(f, '\t%d files\n'%len(self._training_files))
+                write(f, u'\n')
                 
-            f.write(u'-'*40)
-            f.write(u'\n\n')
+            write(f, u'-'*40)
+            write(f, u'\n\n')
 
             # get output as full string
             contents = f.getvalue()
@@ -127,6 +134,7 @@ class ClinerModel:
 
         @param use_lstm. Bool indicating whether to train a CRF or LSTM.
         """
+        
         self._use_lstm       = use_lstm
         self._is_trained     = False
         self._clf            = None
@@ -135,9 +143,29 @@ class ClinerModel:
         self._log            = None
         self._text_feats     = None
 
+        # Import the tools for either CRF or LSTM
+        if use_lstm:
+            # NEW
+            import DatasetCliner_experimental as Exp
+
+            import tensorflow as tf
+            import entity_lstm as entity_model
+            import training_predict_LSTM
+            import pickle
+            import copy
+            import helper_dataset as hd
+            import shutil
+                    
+            self._pretrained_dataset=None
+            self._pretrained_wordvectors=None
+            
+            self._current_model=None
+            self._parameters=None
+        
 
 
-    def train(self, notes):
+
+    def train(self, train_notes, val=[], test=[]):
         """
         ClinerModel::train()
 
@@ -148,46 +176,94 @@ class ClinerModel:
         """
 
         # Extract formatted data
-        tokenized_sentences = flatten([n.getTokenizedSentences() for n in notes])
-        labels              = flatten([n.getTokenLabels() for n in notes])
-       
-        self.train_fit(tokenized_sentences, labels, dev_split=0.1)
+        train_sents  = flatten([n.getTokenizedSentences() for n in train_notes])
+        train_labels = flatten([n.getTokenLabels()        for n in train_notes])
 
-        self._training_files = [ n.getName() for n in notes ]
+        if test:
+            test_sents  = flatten([n.getTokenizedSentences() for n in test])
+            test_labels = flatten([n.getTokenLabels()        for n in test])
+        else:
+            test_sents  = []
+            test_labels = []
+
+        if val:
+            print ("VAL")
+            val_sents  = flatten([n.getTokenizedSentences() for n in val])
+            val_labels = flatten([n.getTokenLabels()        for n in val])
+            self.train_fit(train_sents,train_labels,val_sents=val_sents,val_labels=val_labels,test_sents=test_sents,test_labels=test_labels)
+
+        else:
+            print ("NO DEV")
+            self.train_fit(train_sents, train_labels, dev_split=0.1,
+                           test_sents=test_sents, test_labels=test_labels)
+
+        self._train_files = [ n.getName() for n in train_notes+val ]
 
 
-    def train_fit(self,tok_sents, tags, val_sents=None, val_tags=None, dev_split=None):
+    def train_fit(self, train_sents, train_labels, val_sents=None, val_labels=None,
+                  test_sents=None, test_labels=None, dev_split=None):
         """
         ClinerModel::train_fit()
 
         Purpose: Train clinical concept extraction model using annotated data.
 
-        @param tok_sents.   A list of sentences, where each sentence is tokenized into words.
-        @param tags.        Parallel to 'tokenized_sents', 7-way labels for concept spans.
+        @param train_sents. A list of sentences, where each sentence is tokenized into words.
+        @param train_labels. Parallel to 'train_sents', 7-way labels for concept spans.
         @param val_sents.   Validation data. Same format as tokenized_sents
-        @param val_tags.    Validation data. Same format as iob_nested_labels
+        @param val_labels.  Validation data. Same format as iob_nested_labels
         @param dev_split    A real number from 0 to 1
         """
         # metadata
         self._time_train_begin = strftime("%Y-%m-%d %H:%M:%S", localtime())
 
         # train classifier
-        voc, clf, dev_score, enabled_features = generic_train('all', 
-                                                              tok_sents             ,
-                                                              tags                  ,
-                                                              self._use_lstm        ,
-                                                              val_sents=val_sents   , 
-                                                              val_labels=val_tags   ,
-                                                              dev_split=dev_split   )
-        
-        self._is_trained = True
-        self._vocab = voc
-        self._clf   = clf
-        self._score = dev_score
-        self._features = enabled_features
+        if self._use_lstm==False:
+          voc, clf, dev_score, enabled_features = generic_train('all', 
+                                                              train_sents             ,
+                                                              train_labels            ,
+                                                              self._use_lstm          ,
+                                                              val_sents=val_sents     ,
+                                                              val_labels=val_labels   ,
+                                                              test_sents=test_sents   ,
+                                                              test_labels=test_labels ,
+                                                              dev_split=dev_split     )
+          self._is_trained = True
+          self._vocab = voc
+          self._clf   = clf
+          self._score = dev_score
+          self._features = enabled_features
+        # metadata
+          self._time_train_end = strftime("%Y-%m-%d %H:%M:%S", localtime())
+
+          
+          
+          
+        else:
+          print ("IN ERROR CHECK")
+          print (dev_split)
+          parameters,dataset,best = generic_train('all', 
+                                                              train_sents             ,
+                                                              train_labels            ,
+                                                              self._use_lstm          ,
+                                                              val_sents=val_sents     ,
+                                                              val_labels=val_labels   ,
+                                                              test_sents=test_sents   ,
+                                                              test_labels=test_labels ,
+                                                              dev_split=dev_split     )
+          self._is_trained = True
+          self.pretrained_dataset=dataset
+          self.parameters=parameters
+          self._score=best
+          self._time_train_end = strftime("%Y-%m-%d %H:%M:%S", localtime())
+          print ("BEST EPOCH")
+          print (best)
+        #self._vocab = voc
+        #self._clf   = clf
+        #self._score = dev_score
+        #self._features = enabled_features
 
         # metadata
-        self._time_train_end = strftime("%Y-%m-%d %H:%M:%S", localtime())
+        #self._time_train_end = strftime("%Y-%m-%d %H:%M:%S", localtime())
 
 
     def predict_classes_from_document(self, document):
@@ -215,149 +291,231 @@ class ClinerModel:
                                   into words
         @return                  List of predictions
         """
+
+        hyperparams = {}
+
         # Predict labels for prose
-        num_pred = generic_predict('all'                     ,
-                                    tokenized_sents          ,
-                                    vocab    = self._vocab   ,
-                                    clf      = self._clf     ,
-                                    use_lstm = self._use_lstm)
-        
-        iob_pred = [ [id2tag[p] for p in seq] for seq in num_pred ]
+        if self._use_lstm:
+            if self.parameters==None:
+                hyperprams['parameters'] = hd.load_parameters_from_file("LSTM_parameters.txt")  
+
+            if self._pretrained_dataset==None:
+                temp_pretrained_dataset = os.path.join(hyperparams['parameters']['model_folder'], 
+                                                       "dataset.pickle")
+                hyperparams['pretrained_dataset'] = pickle.load(open(temp_pretrained_dataset_adress, 'rb'))
+
+        vectorized_pred = generic_predict('all'                    ,
+                                          tokenized_sents          ,
+                                          vocab    = self._vocab   ,
+                                          clf      = self._clf     ,
+                                          use_lstm = self._use_lstm,
+                                          hyperparams = hyperparams)
+                                          #pretrained_dataset=self._pretrained_dataset,
+                                          #tokens_to_vec=self._pretrained_wordvector,
+                                          #current_model=self._current_model,
+                                          #parameters=self.parameters)
+
+        #self._current_model=model
+
+        if self._use_lstm:
+            iob_pred = vectorized_pred
+        else:
+            iob_pred = [ [id2tag[p] for p in seq] for seq in vectorized_pred ]
 
         return iob_pred
 
-    ############################################################################
-    ###               Lowest-level (interfaces to ML modules)                ###
-    ############################################################################
 
-def generic_train(p_or_n, tokenized_sents, iob_nested_labels, use_lstm, val_sents=None, val_labels=None, dev_split=None):
+
+############################################################################
+###               Lowest-level (interfaces to ML modules)                ###
+############################################################################
+
+def generic_train(p_or_n, train_sents, train_labels, use_lstm, val_sents=None, val_labels=None, test_sents=None, test_labels=None, dev_split=None):
 
     '''
     generic_train()
 
     Train a model that works for both prose and nonprose
 
-    @param p_or_n.             A string that indicates "prose", "nonprose", or "all"
-    @param tokenized_sents.    A list of sentences, where each sentence is tokenized
-                                 into words
-    @param iob_nested_labels.  Parallel to `tokenized_sents`, 7-way labels for 
-                                 concept spans
-    @param use_lstm            Bool indicating whether to train CRF or LSTM.
-    @param val_sents.          Validation data. Same format as tokenized_sents
-    @param val_labels.         Validation data. Same format as iob_nested_labels
-    @param dev_split.          A real number from 0 to 1
+    @param p_or_n.         A string that indicates "prose", "nonprose", or "all"
+    @param train_sents.    A list of sentences; each sentence is tokenized into words
+    @param train_labels.   Parallel to `train_sents`, 7-way labels for concept spans
+    @param use_lstm        Bool indicating whether to train CRF or LSTM.
+    @param val_sents.      Validation data. Same format as train_sents
+    @param val_labels.     Validation data. Same format as train_labels
+    @param dev_split.      A real number from 0 to 1
     '''
 
     # Must have data to train on:
-    if len(tokenized_sents) == 0:
+    if len(train_sents) == 0:
         raise Exception('Training must have %s training examples' % p_or_n)
 
     # if you should split the data into train/dev yourself
-    #if (not val_sents) and (dev_split > 0.0) and (len(tokenized_sents)>1000):
-    if (not val_sents) and (dev_split > 0.0) and (len(tokenized_sents)>10):
+    if (not val_sents) and (dev_split > 0.0) and (len(train_sents)>10):
 
         p = int(dev_split*100)
-        print '\tCreating %d/%d train/dev split' % (100-p,p)
+        sys.stdout.write('\tCreating %d/%d train/dev split\n' % (100-p,p))
 
-        perm = range(len(tokenized_sents))
+        perm = list(range(len(train_sents)))
         random.shuffle(perm)
 
-        tokenized_sents   = [   tokenized_sents[i] for i in perm ]
-        iob_nested_labels = [ iob_nested_labels[i] for i in perm ]
+        train_sents  = [ train_sents[i]  for i in perm ]
+        train_labels = [ train_labels[i] for i in perm ]
 
-        ind = int(dev_split*len(tokenized_sents))
+        ind = int(dev_split*len(train_sents))
 
-        val_sents   = tokenized_sents[:ind ]
-        train_sents = tokenized_sents[ ind:]
+        val_sents   = train_sents[:ind ]
+        train_sents = train_sents[ ind:]
 
-        val_labels   = iob_nested_labels[:ind ]
-        train_labels = iob_nested_labels[ ind:]
-
-        tokenized_sents   = train_sents
-        iob_nested_labels = train_labels
-
-
-    print '\tvectorizing words', p_or_n
-
-    #tokenized_sents   = train_sents[ :2]
-    #iob_nested_labels = train_labels[:2]
-
-    # count word frequencies to determine OOV
-    freq = defaultdict(int)
-    for sent in tokenized_sents:
-        for w in sent:
-            freq[w] += 1
-
-    # determine OOV based on % of vocab or minimum word freq threshold
-    oov = set()
-    '''
-    if len(freq) < 100:
-        lo = len(freq)/20
-        oov = set([ w for w,f in sorted(freq.items(), key=lambda t:t[1]) ][:lo])
+        val_labels   = train_labels[:ind ]
+        train_labels = train_labels[ ind:]
     else:
-        #lo = 2
-        #oov = set([ w for w,f in freq.items() if (f <= lo) ])
-        oov = set()
-    '''
+        sys.stdout.write('\tUsing existing validation data\n')
 
-    '''
-    val = None
-    for w,f in sorted(freq.items(), key=lambda t:t[1]):
-        if val != f:
-            val = f
-            print
-        print '%8d  %s' % (f,w)
-    exit()
-    '''
+
+    sys.stdout.write('\tvectorizing words %s\n' % p_or_n)
+
 
     if use_lstm:
-        ########
-        # LSTM
-        ########
+        print ("TESTING NEW DATSET OBJECT")
+        dataset = Exp.Dataset()
+        
+        parameters=hd.load_parameters_from_file("LSTM_parameters.txt")
+        parameters['use_pretrained_model']=False
+        
 
-        # build vocabulary of words
-        vocab = {}
-        for sent in tokenized_sents:
-            for w in sent:
-                if (w not in vocab) and (w not in oov):
-                    vocab[w] = len(vocab) + 1
-        vocab['oov'] = len(vocab) + 1
+        
+        Datasets_tokens={}
+        Datasets_labels={}
+               
+        Datasets_tokens['train']=train_sents
+        Datasets_labels['train']=train_labels
+        
+        if  val_sents!=None:
+            Datasets_tokens['valid']=val_sents
+            Datasets_labels['valid']=val_labels
+            
+        if test_sents!=None:
+            Datasets_tokens['test']=test_sents
+            Datasets_labels['test']=test_labels
 
-        # vectorize tokenized sentences
-        X_seq_ids = []
-        for sent in tokenized_sents:
-            id_seq = [ (vocab[w] if w in vocab else vocab['oov']) for w in sent ]
-            X_seq_ids.append(id_seq)
+        dataset.load_dataset(Datasets_tokens,Datasets_labels,"",parameters)
+        pickle.dump(dataset, open(os.path.join(parameters['model_folder'], 'dataset.pickle'), 'wb'))
+        
+        print (Datasets_tokens['valid'][0])
+        print (Datasets_tokens['test'][0])
+        
 
-        # vectorize IOB labels
-        Y_labels = [ [tag2id[y] for y in y_seq] for y_seq in iob_nested_labels ]
+        parameters['Feature_vector_length']=dataset.feature_vector_size
+        parameters['use_features_before_final_lstm']=False 
+        parameters['learning_rate']=0.005
+        
 
-        # if there is specified validation data, then vectorize it
-        if val_sents:
-            # vectorize validation X
-            val_X = []
-            for sent in val_sents:
-                id_seq = [ (vocab[w] if w in vocab else vocab['oov']) for w in sent ]
-                val_X.append(id_seq)
-            # vectorize validation Y
-            val_Y = [ [tag2id[y] for y in y_seq] for y_seq in val_labels ]
+        
+        sess = tf.Session()
+        number_of_sent=list(range(len(dataset.token_indices['train'])))
 
+        with sess.as_default():
+            model=entity_model.EntityLSTM(dataset,parameters)
+            sess.run(tf.global_variables_initializer())
+            model.load_pretrained_token_embeddings(sess, dataset,parameters)
+            epoch_number = -1
+            transition_params_trained = np.random.rand(5+2,5+2)
+            values={}
+            values["best"]=0
+        
+            f1_dictionary={}
+            f1_dictionary['best']=0
+            
+            model_saver = tf.train.Saver(max_to_keep=100)
+            
+        print ("START TRAINING")    
+        
+        parameters['conll_like_result_folder']='/tmp/cliner_eval_%d' % random.randint(0,256)+os.sep
+        
+    
+        test_temp = os.path.join(parameters['conll_like_result_folder'], 'test/')
+        train_temp = os.path.join(parameters['conll_like_result_folder'], 'train/')
+        valid_temp = os.path.join(parameters['conll_like_result_folder'], 'valid/')
+        
+        os.mkdir(parameters['conll_like_result_folder'])
+        os.mkdir(test_temp)
+        os.mkdir(train_temp)
+        os.mkdir(valid_temp)
+
+        
+        
+        while epoch_number<90: 
+            average_loss_per_phrase=0
+            accuracy_per_phase=0
+            step = 0
+    
+            epoch_number += 1
+            if epoch_number != 0:          
+                sequence_numbers=list(range(len(dataset.token_indices['train'])))
+                random.shuffle(sequence_numbers)
+                for sequence_number in sequence_numbers:
+                    loss,accuracy,transition_params_trained=training_predict_LSTM.train_step(sess, dataset, sequence_number, model)  
+                    average_loss_per_phrase+=loss    
+                    accuracy_per_phase+=accuracy
+                    step += 1
+                    if step % 10 == 0:
+                         print('Training {0:.2f}% done\n'.format(step/len(sequence_numbers)*100))
+
+                model_saver.save(sess, os.path.join(parameters['model_folder'], 'model_{0:05d}.ckpt'.format(epoch_number)))    
+                
+
+                
+                total_loss=average_loss_per_phrase
+                total_accuracy=accuracy_per_phase
+                                                            
+                average_loss_per_phrase=average_loss_per_phrase/len(number_of_sent)
+                accuracy_per_phase=accuracy_per_phase/len(number_of_sent)
+
+        
+            if epoch_number>0:
+                ""
+                f1,predictions=training_predict_LSTM.prediction_step(sess,dataset,"test",model,epoch_number,parameters['conll_like_result_folder'],transition_params_trained)                 
+                f1_train,_=training_predict_LSTM.prediction_step(sess,dataset,"train", model,epoch_number,parameters['conll_like_result_folder'],transition_params_trained)          
+                f1_valid,_=training_predict_LSTM.prediction_step(sess,dataset,"valid", model,epoch_number,parameters['conll_like_result_folder'],transition_params_trained)
+                
+                
+                correctly_predicted_tokens=training_predict_LSTM.compute_train_accuracy(parameters['conll_like_result_folder']+"valid"+os.sep+"epoche_"+str(epoch_number)+".txt")
+                
+                if f1_dictionary['best']<float(f1_valid):
+                    f1_dictionary['epoche']=epoch_number
+                    f1_dictionary['best']=float(f1_valid)
+                
+                
+                if values["best"]<correctly_predicted_tokens:
+                    values["epoche"]=epoch_number
+                    values["best"]=correctly_predicted_tokens
+                
+                #print ("Number of correctly predicted tokens -test "+str(correctly_predicted_tokens))
+                
+                print ("NEW EPOCHE"+" "+str(epoch_number))
+                
+                print ("Current F1 on train"+" "+str(f1_train))
+                print ("Current F1 on valid"+" "+str(f1_valid))
+                print ("Current F1 on test"+" "+str(f1))
+                
+                
+                print ("Current F1 best (validation): ")
+                print (f1_dictionary)
+
+        shutil.rmtree(parameters['conll_like_result_folder'])
+        return parameters, dataset,f1_dictionary['best']
+    
     else:
         ########
         # CRF
         ########
 
+        from feature_extraction.features import extract_features
+
         # vectorize tokenized sentences
-        '''
-        def make_feature(ind):
-            return {(ind,i):1 for i in range(10)}
-        text_features = []
-            fseq = [make_feature(vocab[w] if w in vocab else vocab['oov']) for w in sent]
-            text_features.append(fseq)
-        '''
-        text_features = extract_features(tokenized_sents)
+        text_features = extract_features(train_sents)
         # type(text_features): <type 'list'>
-        # text_features is a list of list of dicts
         
         # Collect list of feature types
         enabled_features = set()
@@ -377,12 +535,14 @@ def generic_train(p_or_n, tokenized_sents, iob_nested_labels, use_lstm, val_sent
         flat_X_feats = vocab.fit_transform( flatten(text_features) )
         X_feats = reconstruct_list(flat_X_feats, save_list_structure(text_features))
 
+
         # vectorize IOB labels
-        Y_labels = [ [tag2id[y] for y in y_seq] for y_seq in iob_nested_labels ]
+        Y_labels = [ [tag2id[y] for y in y_seq] for y_seq in train_labels ]
 
         assert len(X_feats) == len(Y_labels)
         for i in range(len(X_feats)):
             assert X_feats[i].shape[0] == len(Y_labels[i])
+
 
         # if there is specified validation data, then vectorize it
         if val_sents:
@@ -394,22 +554,39 @@ def generic_train(p_or_n, tokenized_sents, iob_nested_labels, use_lstm, val_sent
             # vectorize validation Y
             val_Y = [ [tag2id[y] for y in y_seq] for y_seq in val_labels ]
 
+        # if there is specified test data, then vectorize it
+        if test_sents:
+            # vectorize test X
+            test_text_features = extract_features(test_sents)
+            flat_test_X_feats = vocab.transform( flatten(test_text_features) )
+            test_X = reconstruct_list(flat_test_X_feats,
+                                     save_list_structure(test_text_features))
+            # vectorize test Y
+            test_Y = [ [tag2id[y] for y in y_seq] for y_seq in test_labels ]
+        else:
+            test_X = None
+            test_Y = None
 
-    print '\ttraining classifiers', p_or_n
+
+    sys.stdout.write('\ttraining classifiers %s\n' % p_or_n)
 
     if use_lstm:
         # train using lstm
         clf, dev_score  = keras_ml.train(X_seq_ids, Y_labels, tag2id, len(vocab),
-                                         val_X_ids=val_X, val_Y_ids=val_Y)
+                                         val_X_ids=val_X, val_Y_ids=val_Y,
+                                         test_X_ids=test_X, test_Y_ids=test_Y)
     else:
         # train using crf
-        clf, dev_score  = crf.train(X_feats, Y_labels, val_X=val_X, val_Y=val_Y)
+        from machine_learning   import crf
+        clf, dev_score  = crf.train(X_feats, Y_labels, val_X=val_X, val_Y=val_Y,
+                                   test_X=test_X, test_Y=test_Y)
 
     return vocab, clf, dev_score, enabled_features
 
 
 
-def generic_predict(p_or_n, tokenized_sents, vocab, clf, use_lstm):
+#def generic_predict(p_or_n, tokenized_sents, vocab, clf, use_lstm, pretrained_dataset=None,tokens_to_vec=None,  current_model=None, parameters=None):
+def generic_predict(p_or_n, tokenized_sents, vocab, clf, use_lstm, hyperparams):
     '''
     generic_predict()
 
@@ -422,106 +599,111 @@ def generic_predict(p_or_n, tokenized_sents, vocab, clf, use_lstm):
     @param clf.             An encoding of the trained keras model.
     @param use_lstm.        Bool indicating whether clf is a CRF or LSTM.
     '''
+   # use_lstm=self._use_lstm
+    if use_lstm:
+                   
+       #parameters=hd.load_parameters_from_file("LSTM_parameters.txt")
+       parameters['use_pretrained_model']=True
+       
+       #model_folder="./models/NN_models"
+       predictions=[]
+       sys.stdout.write('\n use_lstm \n')
+       dataset = Exp.Dataset()     
+       
+       fictional_labels= copy.deepcopy(tokenized_sents)
+       for idx,x in enumerate(fictional_labels):
+           for val_id,value in enumerate(x):
+                fictional_labels[idx][val_id]='O'
+       
+       Datasets_tokens={}
+       Datasets_labels={}
+       
+       Datasets_tokens['deploy']=tokenized_sents
+       Datasets_labels['deploy']=fictional_labels
+       
+       token_to_vector=dataset.load_dataset(Datasets_tokens, Datasets_labels, "", parameters,token_to_vector=tokens_to_vec, pretrained_dataset=pretrained_dataset)
+
+       print (dataset.token_indices.keys())
+
+       parameters['Feature_vector_length']=dataset.feature_vector_size
+       parameters['use_features_before_final_lstm']=False 
+       
+       
+       dataset.update_dataset("", ['deploy'],Datasets_tokens,Datasets_labels)
+       
+       del Datasets_tokens
+       del Datasets_labels
+       
+       
+       #model=current_model
+       model=entity_model.EntityLSTM(dataset,parameters)
+
+       os.mkdir(parameters['conll_like_result_folder'])
+       
+           
+       test_temp = os.path.join(parameters['conll_like_result_folder'], 'test/')
+       train_temp = os.path.join(parameters['conll_like_result_folder'], 'train/')
+       valid_temp = os.path.join(parameters['conll_like_result_folder'], 'valid/')
+       
+       
+       os.mkdir(test_temp)
+       os.mkdir(train_temp)
+       os.mkdir(valid_temp)
+        
+       sess = tf.Session()
+       with sess.as_default():      
+           
+            #model=entity_model.EntityLSTM(dataset,parameters)
+            transition_params_trained=model.restore_from_pretrained_model(parameters, dataset, sess, token_to_vector=token_to_vector,pretrained_dataset=pretrained_dataset)
+            del token_to_vector           
+            predictions=training_predict_LSTM.prediction_step(sess,dataset,"deploy",model,0,parameters['conll_like_result_folder'],transition_params_trained)  
+            sess.close()
+          
+       tf.reset_default_graph() 
+
+       shutil.rmtree(parameters['conll_like_result_folder'])
+       return predictions, model
+
 
     # If nothing to predict, skip actual prediction
     if len(tokenized_sents) == 0:
-        print '\tnothing to predict ' + p_or_n
+        sys.stdout.write('\tnothing to predict %s\n' % p_or_n)
         return []
 
-    print '\tvectorizing words ' + p_or_n
+    sys.stdout.write('\tvectorizing words %s\n' % p_or_n)
 
     if use_lstm:
+        print('todo: incorporate lstm')
         # vectorize tokenized sentences
-        X = []
-        for sent in tokenized_sents:
-            id_seq = []
-            for w in sent:
-                if w in vocab:
-                    id_seq.append(vocab[w])
-                else:
-                    id_seq.append(vocab['oov'])
-            X.append(id_seq)
+        #X = []
+        #for sent in tokenized_sents:
+         #   id_seq = []
+         #   for w in sent:
+          #      if w in vocab:
+         #           id_seq.append(vocab[w])
+         #       else:
+            #        id_seq.append(vocab['oov'])
+          #  X.append(id_seq)
     else:
+        from feature_extraction.features import extract_features
+
         # vectorize validation X
         text_features = extract_features(tokenized_sents)
         flat_X_feats = vocab.transform( flatten(text_features) )
         X = reconstruct_list(flat_X_feats, save_list_structure(text_features))
 
-    print '\tpredicting  labels ' + p_or_n
+    sys.stdout.write('\tpredicting  labels %s\n' % p_or_n)
 
     # Predict labels
     if use_lstm:
-        predictions = keras_ml.predict(clf, X)
+       print ("TEST_PREDICT")
+       exit()
+         
+       
     else:
+        from machine_learning   import crf
         predictions =   crf.predict(clf, X)
 
     # Format labels from output
     return predictions
-
-
-
-def print_files(f, file_names):
-    '''
-    print_files()
-
-    Pretty formatting for listing the training files in a 
-    log.
-
-    @param f.           An open file stream to write to.
-    @param file_names.  A list of filename strings.
-    '''
-    COLUMNS = 4
-    file_names = sorted(file_names)
-    start = 0
-    for row in range(len(file_names)/COLUMNS + 1):
-        f.write(u'\t\t')
-        for featname in file_names[start:start+COLUMNS]:
-            f.write(unicode('%-15s' % featname))
-        f.write(u'\n')
-        start += COLUMNS
-
-
-
-def print_vec(f, label, vec):
-    '''
-    print_vec()
-
-    Pretty formatting for displaying a vector of numbers in a log.
-
-    @param f.           An open file stream to write to.
-    @param label.  A description of the numbers (e.g. "recall").
-    @param vec.    A numpy array of the numbers to display.
-    '''
-    COLUMNS = 7
-    start = 0
-    f.write(unicode('\t%-10s: ' % label))
-    if type(vec) != type([]):
-        vec = vec.tolist()
-    for row in range(len(vec)/COLUMNS):
-        for featname in vec[start:start+COLUMNS]:
-            f.write(unicode('%7.3f' % featname))
-        f.write(u'\n')
-        start += COLUMNS
-        
-def print_str(f, label, names):
-
-    '''
-    print_str()
-    Pretty formatting for displaying a list of strings in a log
-    @param f.           An open file stream to write to.
-    @param label.  A description of the numbers (e.g. "recall").
-    @param names.  A list of strings.
-    '''
-    COLUMNS = 4
-    start = 0
-    for row in range(int(math.ceil(float(len(names))/COLUMNS))):
-        if row == 0:
-            f.write(unicode('\t%-10s: ' % label))
-        else:
-            f.write(unicode('\t%-10s  ' % ''))
-
-        for featname in names[start:start+COLUMNS]:
-            f.write(unicode('%-16s ' % featname))
-            
-        f.write(u'\n')
-        start += COLUMNS
+    

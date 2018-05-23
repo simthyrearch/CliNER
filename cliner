@@ -9,15 +9,13 @@
 ######################################################################
 
 
-
 import sys
 import os
 
 
-
 def main():
 
-    commands = ['train', 'predict', 'evaluate', 'error']
+    commands = ['train', 'predict', 'evaluate']
 
     help_msg = \
     '''
@@ -32,7 +30,7 @@ def main():
 
     # Is argument correct?
     if len(sys.argv)<2 or sys.argv[1] not in commands or sys.argv[1] == '--help':
-        print >>sys.stderr, help_msg, '\n'
+        sys.stderr.write('%s\n\n'%(help_msg))
         exit(1)
 
     # select appropriate sub-command
@@ -55,9 +53,6 @@ def main():
     elif subcmd == 'evaluate':
         import evaluate
         evaluate.main()
-    elif subcmd == 'error':
-        import error
-        error.main()
 
 
 

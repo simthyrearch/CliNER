@@ -8,9 +8,9 @@
 
 
 # What modules are available
-from utilities import load_pos_tagger
-from read_config import enabled_modules
-import word_features as feat_word
+from .utils import load_pos_tagger
+from .read_config import enabled_modules
+from . import word_features as feat_word
 
 
 
@@ -25,7 +25,7 @@ enabled = enabled_modules()
 # Import feature modules
 feat_genia=None
 if enabled['GENIA']:
-    from genia_dir.genia_features import GeniaFeatures
+    from .genia_dir.genia_features import GeniaFeatures
 
 
 #Only create UMLS cache if module is available
@@ -158,12 +158,12 @@ def extract_features_sentence(sentence):
             genia_feat_list = feat_genia.features(sentence)
 
             '''
-            print '\t', sentence
-            print '\n\n'
+            print( '\t', sentence)
+            print( '\n\n')
             for gf in genia_feat_list:
-                print '\t', gf
-                print
-            print '\n\n'
+                print( '\t', gf)
+                print()
+            print ('\n\n')
             '''
 
             for i,feat_dict in enumerate(genia_feat_list):
@@ -184,7 +184,7 @@ def extract_features_sentence(sentence):
     ngram_features = [{} for i in range(len(features_list))]
     if "prev" in enabled_IOB_prose_sentence_features:
         prev = lambda f: {("prev_"+k[0], k[1]): v for k,v in f.items()}
-        prev_list = map(prev, features_list)
+        prev_list = list(map(prev, features_list))
         for i in range(len(features_list)):
             if i == 0:
                 ngram_features[i][("prev", "*")] = 1
@@ -193,7 +193,7 @@ def extract_features_sentence(sentence):
 
     if "prev2" in enabled_IOB_prose_sentence_features:
         prev2 = lambda f: {("prev2_"+k[0], k[1]): v/2.0 for k,v in f.items()}
-        prev_list = map(prev2, features_list)
+        prev_list = list(map(prev2, features_list))
         for i in range(len(features_list)):
             if i == 0:
                 ngram_features[i][("prev2", "*")] = 1
@@ -204,7 +204,7 @@ def extract_features_sentence(sentence):
 
     if "next" in enabled_IOB_prose_sentence_features:
         next = lambda f: {("next_"+k[0], k[1]): v for k,v in f.items()}
-        next_list = map(next, features_list)
+        next_list = list(map(next, features_list))
         for i in range(len(features_list)):
             if i < len(features_list) - 1:
                 ngram_features[i].update(next_list[i+1])
@@ -213,7 +213,7 @@ def extract_features_sentence(sentence):
 
     if "next2" in enabled_IOB_prose_sentence_features:
         next2 = lambda f: {("next2_"+k[0], k[1]): v/2.0 for k,v in f.items()}
-        next_list = map(next2, features_list)
+        next_list = list(map(next2, features_list))
         for i in range(len(features_list)):
             if i < len(features_list) - 2:
                 ngram_features[i].update(next_list[i+2])
@@ -222,15 +222,15 @@ def extract_features_sentence(sentence):
             else:
                 ngram_features[i][("next2", "*")] = 1
 
-    merged = lambda d1, d2: dict(d1.items() + d2.items())
+    merged = lambda d1, d2: dict(list(d1.items()) + list(d2.items()))
     features_list = [merged(features_list[i], ngram_features[i])
         for i in range(len(features_list))]
 
     '''
     for f in features_list:
-        print sorted(f.items())
-        print
-    print '\n\n\n'
+        print (sorted(f.items()))
+        print ()
+    print ('\n\n\n')
     '''
 
     return features_list
@@ -238,10 +238,10 @@ def extract_features_sentence(sentence):
 
 
 def display_enabled_modules():
-    print
+    print()
     for module,status in enabled.items():
         if status:
-            print '\t', module, '\t', ' ENABLED'
+            print ('\t', module, '\t', ' ENABLED')
         else:
-            print '\t', module, '\t', 'DISABLED'
-    print
+            print ('\t', module, '\t', 'DISABLED')
+    print()

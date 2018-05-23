@@ -97,7 +97,7 @@ def pycrf_instances(fi, labeled):
         if labeled:
             yseq.append(fields[0])
 
-def train(X, Y, val_X=None, val_Y=None):
+def train(X, Y, val_X=None, val_Y=None, test_X=None, test_Y=None):
     '''
     train()
     Train a Conditional Random Field for sequence tagging.
@@ -130,7 +130,7 @@ def train(X, Y, val_X=None, val_Y=None):
 
     # Read the trained model into a string (so it can be pickled)
     model = ''
-    with open(tmp_file, 'r') as f:
+    with open(tmp_file, 'rb') as f:
         model = f.read()
     os.close(os_handle)
 
@@ -151,6 +151,11 @@ def train(X, Y, val_X=None, val_Y=None):
         val_pred  = predict(model, val_X)
         val_stats = compute_performance_stats('dev', val_pred, val_Y)
         scores['dev'] = val_stats
+
+    if test_X:
+        test_pred  = predict(model, test_X)
+        test_stats = compute_performance_stats('test', test_pred, test_Y)
+        scores['test'] = test_stats
 
     # keep track of which external modules were used for building this model!
     scores['hyperparams'] = {}

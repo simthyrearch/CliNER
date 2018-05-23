@@ -1,4 +1,4 @@
-import cPickle as pickle
+import pickle
 import sys
 import os
 
@@ -15,9 +15,6 @@ enabled = enabled_modules()
 umls_tables = enabled['UMLS']
 
 
-features_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if features_dir not in sys.path:
-    sys.path.append(features_dir)
 from utilities import load_pickled_obj
 
 class UmlsCache:

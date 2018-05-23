@@ -12,7 +12,7 @@ import argparse
 import glob
 import random
 import shutil
-import commands
+import subprocess
 
 import tools
 
@@ -37,33 +37,33 @@ def main():
 
 
     if not args.pred:
-        print '\n\tERROR: must provide --pred argument\n'
+        sys.stderr.write('\n\tERROR: must provide --pred argument\n\n')
         parser.print_help(sys.stderr)
-        print >>sys.stderr,  ''
+        sys.stderr.write('\n')
         exit(1)
 
     if not args.gold:
-        print '\n\tERROR: must provide --gold argument\n'
+        sys.stderr.write('\n\tERROR: must provide --gold argument\n\n')
         parser.print_help(sys.stderr)
-        print >>sys.stderr,  ''
+        sys.stderr.write('\n')
         exit(1)
 
     if args.format:
         format = args.format
     else:
-        print '\n\tERROR: must provide --format argument\n'
+        sys.stderr.write('\n\tERROR: must provide --format argument\n\n')
         parser.print_help(sys.stderr)
-        print >>sys.stderr,  ''
+        sys.stderr.write('\n')
         exit(1)
 
 
     # Must specify output format
     if format not in ['i2b2']:
-        print >>sys.stderr, '\n\tError: Must specify output format'
-        print >>sys.stderr,   '\tAvailable formats: con'
-        print >>sys.stderr, ''
+        sys.stderr.write('\n\tError: Must specify output format\n')
+        sys.stderr.write('\tAvailable formats: i2b2\n')
+        sys.stderr.write('\n')
         parser.print_help(sys.stderr)
-        print >>sys.stderr,  ''
+        sys.stderr.write('\n')
         exit(1)
 
 
@@ -112,8 +112,7 @@ def main():
     eval_jar = os.path.join(eval_dir, 'i2b2va-eval.jar')
 
     cmd = 'java -jar %s -rcp %s -scp %s -ft con -ex all' % (eval_jar, gold_dir, pred_dir)
-    status,output = commands.getstatusoutput(cmd)
-    print output
+    status = subprocess.call(cmd, shell=True, stdout=sys.stdout)
 
     # cleanup after yourself
     shutil.rmtree(tempdir_name)

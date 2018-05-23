@@ -14,7 +14,7 @@ import re
 import os
 import sys
 
-from wordshape import getWordShapes
+from .wordshape import getWordShapes
 from nltk import LancasterStemmer, PorterStemmer
 
 lancaster_st = LancasterStemmer()
@@ -34,10 +34,13 @@ def feature_last_two_letters(word):
     return {('last_two_letters', word[-2:]): 1}
 
 def feature_length(word):
-    return {('length', None): len(word)}
+    return {('length', ''): len(word)}
 
 def feature_stem_porter(word):
-    return {('stem_porter', porter_st.stem(word)): 1}
+    try:
+        return {('stem_porter', porter_st.stem(word)): 1}
+    except Exception as e:
+        return {}
 
 def feature_mitre(word):
     features = {}
@@ -54,7 +57,7 @@ def feature_word_shape(word):
     return features
 
 def feature_metric_unit(word):
-    unit = None
+    unit = ''
     if is_weight(word):
         unit = 'weight'
     elif is_size(word):
@@ -83,34 +86,34 @@ def QANN_features(word):
     features = {}
 
     # Feature: test result
-    if is_test_result(word):    features[('test_result',None)] = 1
+    if is_test_result(word):    features[('test_result','')] = 1
 
     # Feature: measurements
-    if is_measurement(word):    features[('measurement',None)] = 1
+    if is_measurement(word):    features[('measurement','')] = 1
 
     # Feature: directive
-    if is_directive(word):      features[('directive',  None)] = 1
+    if is_directive(word):      features[('directive',  '')] = 1
 
     # Feature: date
-    if is_date(word):           features[('date',       None)] = 1
+    if is_date(word):           features[('date',       '')] = 1
 
     # Feature: volume
-    if is_volume(word):         features[('volume',     None)] = 1
+    if is_volume(word):         features[('volume',     '')] = 1
 
     # Feature: weight
-    if is_weight(word):         features[('weight',     None)] = 1
+    if is_weight(word):         features[('weight',     '')] = 1
 
     # Feature: size
-    if is_size(word):           features[('size',       None)] = 1
+    if is_size(word):           features[('size',       '')] = 1
 
     # Feature: prognosis location
-    if is_prognosis_location:   features[('prog_location', None)] = 1
+    if is_prognosis_location:   features[('prog_location', '')] = 1
 
     # Feature: problem form
-    if has_problem_form(word):  features[('problem_form',     None)] = 1
+    if has_problem_form(word):  features[('problem_form',     '')] = 1
 
     # Feature: concept class
-    if is_weight(word):         features[('weight',     None)] = 1
+    if is_weight(word):         features[('weight',     '')] = 1
 
     return features
 
@@ -149,7 +152,7 @@ def IOB_prose_features(word):
     """
 
     # Feature: <dummy>
-    features = {('dummy', None): 1}  # always have >0 dimensions
+    features = {('dummy', ''): 1}  # always have >0 dimensions
 
     # Extract all enabled features
     for feature in enabled_IOB_prose_word_features:
@@ -175,7 +178,7 @@ def IOB_nonprose_features(word):
     """
 
     # Feature: <dummy>
-    features = {('dummy', None): 1}  # always have >0 dimensions
+    features = {('dummy', ''): 1}  # always have >0 dimensions
 
     # Extract all enabled features
     for feature in enabled_IOB_nonprose_word_features:

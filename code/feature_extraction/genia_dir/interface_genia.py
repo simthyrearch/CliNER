@@ -18,8 +18,9 @@ import os
 import sys
 import tempfile
 
-from commands import getstatusoutput
-from genia_cache import GeniaCache
+#from commands import getstatusoutput
+from subprocess import Popen, PIPE
+from .genia_cache import GeniaCache
 
 tmp_dir = '/tmp'
 
@@ -45,7 +46,6 @@ def genia(geniatagger, data):
         if not cache.has_key(sent):
             uncached.append(sent)
 
-
     if uncached:
         # write list to file and then feed it to GENIA
         genia_dir = os.path.dirname(geniatagger)
@@ -56,11 +56,13 @@ def genia(geniatagger, data):
             for line in uncached: f.write(line + '\n')
 
         # Run genia tagger
-        print '\t\tRunning  GENIA tagger'
+        print('\t\tRunning  GENIA tagger')
         genia_dir = os.path.dirname(geniatagger)
-        stream = getstatusoutput('cd %s ; ./geniatagger -nt %s' %(genia_dir,out))
-
-        #print 'stream: ', stream
+        #stream = getstatusoutput('cd %s ; ./geniatagger -nt %s' %(genia_dir,out))
+        p = Popen('cd %s ; ./geniatagger -nt %s' %(genia_dir,out),shell=True,stdout=PIPE,stderr=PIPE)
+        stream_b, err = p.communicate()
+        
+        stream = stream_b.decode('ascii')
 
         #print '\t\tFinished GENIA tagger'
 
@@ -69,17 +71,23 @@ def genia(geniatagger, data):
         tagged = []
 
         # if the sentence is too long genia outputs an error.
-        stream_lines = stream[1].split('\n')
+        stream_lines = stream.split('\n')
+
+        #print('\n\n\n')
+        #print(stream_lines)
+        #print('\n\n\n')
 
         # get the line the warning might be on.
-        potential_warning = "" if len(stream_lines[4:5]) == 0 else stream_lines[4:5][0]
+        #potential_warning = "" if len(stream_lines[4:5]) == 0 else stream_lines[4:5][0]
 
         genia_stream = None
 
-        genia_stream = stream_lines[4:]
+        #genia_stream = stream_lines[4:]
+        genia_stream = stream_lines
 
         for tag in genia_stream:
             if tag.startswith('warning: the sentence seems to be too long'):
+                print('WARNING:', tag)
                 continue
 
             if tag.split():               # Part of line
@@ -90,7 +98,13 @@ def genia(geniatagger, data):
 
         # Add tagger output to cache
         for line,tags in zip(uncached,tagged):
+            #print(line)
+            for w,feat in zip(line.split(),tags):
+                #print('\t', w, feat.split('\t')[0])
+                assert w == feat.split('\t')[0]
+            #print('\n\n\n')
             cache.add_map(line,tags)
+        #print('-'*80)
 
         # Remove temp file
         os.close(os_handle)
@@ -99,6 +113,14 @@ def genia(geniatagger, data):
 
         os.remove(out)
 
+    for sent in data:
+        feats = cache.get_map(' '.join(sent))
+        #print(sent)
+        for w,feat in zip(sent,feats):
+            #print('\t', w, feat.split('\t')[0])
+            assert w == feat.split('\t')[0]
+        #print('\n\n\n')
+    #exit()
 
     # Extract features
     linefeats = []
